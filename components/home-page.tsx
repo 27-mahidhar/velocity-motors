@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import { ArrowDown, ArrowRight, ArrowUpRight, ChevronRight, Heart, Volume2, VolumeX, Zap } from "lucide-react";
@@ -10,9 +10,9 @@ import { CarCard } from "@/components/car-card";
 import { EnquiryForm } from "@/components/enquiry-form";
 import { cars, brands, categories, priceBandLabels, type Car, type CarCategory, type PriceBand } from "@/data/cars";
 
-function playEngineStart() {
+function playEngineStart(): GainNode | null {
   const AudioContextClass = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!AudioContextClass) return;
+  if (!AudioContextClass) return null;
   const context = new AudioContextClass();
   void context.resume();
   const master = context.createGain();
@@ -28,6 +28,7 @@ function playEngineStart() {
   const low = context.createOscillator(); low.type = "sawtooth"; low.frequency.setValueAtTime(48, context.currentTime); low.frequency.exponentialRampToValueAtTime(108, context.currentTime + .55); low.frequency.exponentialRampToValueAtTime(63, context.currentTime + 1.9); low.connect(filter); low.start(); low.stop(context.currentTime + 2);
   const high = context.createOscillator(); high.type = "triangle"; high.frequency.setValueAtTime(94, context.currentTime); high.frequency.exponentialRampToValueAtTime(220, context.currentTime + .55); high.frequency.exponentialRampToValueAtTime(126, context.currentTime + 1.9); high.connect(filter); high.start(); high.stop(context.currentTime + 2);
   window.setTimeout(() => void context.close(), 2400);
+  return master;
 }
 
 function LoadingMark() {
@@ -40,6 +41,7 @@ function Reveal({ image, title, spec, onSelect, active }: { image: string; title
 
 export function HomePage() {
   const reduceMotion = useReducedMotion();
+  const engineGain = useRef<GainNode | null>(null);
   const [loading, setLoading] = useState(true);
   const [intro, setIntro] = useState(true);
   const [soundOn, setSoundOn] = useState(false);
@@ -77,7 +79,17 @@ export function HomePage() {
   }
   function toggleSound() {
     setSoundOn((current) => {
-      if (!current) playEngineStart();
+      if (current) {
+        const gain = engineGain.current;
+        if (gain) {
+          const now = gain.context.currentTime;
+          gain.gain.cancelScheduledValues(now);
+          gain.gain.setValueAtTime(Math.max(gain.gain.value, .0001), now);
+          gain.gain.exponentialRampToValueAtTime(.0001, now + .06);
+        }
+      } else {
+        engineGain.current = playEngineStart();
+      }
       return !current;
     });
   }
